@@ -1,0 +1,27 @@
+{
+  "name": "statemachine",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "@babel/cli": "^7.10.4",
+    "@babel/core": "^7.10.4",
+    "@babel/polyfill": "^7.10.4",
+    "@babel/preset-env": "^7.10.4",
+    "babel-loader": "^8.1.0",
+    "ramda": "^0.27.0",
+    "robot3": "^0.2.18",
+    "rxjs": "^6.6.0",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0",
+    "xstate": "^4.11.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "set NODE_ENV=development& webpack-dev-server --config webpack.config.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
