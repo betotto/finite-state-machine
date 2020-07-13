@@ -2,7 +2,8 @@ const path = require('path');
 
 const config = {
   entry: {
-    index: './index.js'
+    index: './index.js',
+    'web-worker': './SSEStream.js'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -33,6 +34,9 @@ if(process.env.NODE_ENV === 'development') {
   config.devtool = 'source-map';
   config.devServer = {
     contentBase: path.join(__dirname, 'dist'),
+    proxy: {
+      '/connection': 'http://localhost:3000'
+    },
     compress: true,
     port: 9000,
     hot: true,
