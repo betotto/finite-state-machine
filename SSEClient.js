@@ -1,6 +1,9 @@
 import { ReplaySubject } from 'rxjs';
 import { v1 as uuidv1 } from 'uuid';
 import RxjsFsm from './RxjsFsm';
+import R_keys from 'ramda/src/keys';
+import R_mergeRight from 'ramda/src/mergeRight';
+import R_clone from 'ramda/src/clone';
 
 let conversationId;
 let url;
@@ -8,7 +11,7 @@ let eventsSource;
 let machine;
 let timeout;
 let activeTab;
-const tabs = {};
+let tabs = {};
 
 const worker = new Worker('/web-worker.js');
 
@@ -23,27 +26,74 @@ const sseTransitions = {
   WAIT: 'wait',
   INIT: 'init',
   CONNECTED: 'connected',
+  MASTER: 'master',
   FAIL: 'fail',
   DONE: 'done'
 };
 
 const sseTab = `sse-${uuidv1()}`;
 
+const selectBack = () => {
+  const otherTabs = R_keys(tabs).filter(t => tabs[t] !== 'active');
+  if(otherTabs.length > 0) {
+    tabs[otherTabs[0]] = 'back';
+  }
+}
+
 window.addEventListener('storage', e => {
   if(e.key === 'sse-tab-sync') {
     const ev = localStorage.getItem('sse-tab-sync');
     if(event) {
       const evt = JSON.parse(atob(ev));
-      switch(evt.event.type) {
-        case 'tab-joined': tabs[evt.sseTab] = 'other';propagateEvent(Event('tab-exists', sseTab));break;
-        case 'tab-exists': tabs[evt.sseTab] = 'other';break;
-        case 'tab-streaming': activeTab = evt.sseTab; machine.doTransition(sseTransitions.WAIT);break;
-        case 'tab-leave': delete tabs[evt.sseTab];break;
-        case 'tab-close': stop(true);break;
-      }
+      if(evt.sseTab !== sseTab) {
+        switch(evt.event.type) {
+          case 'tab-joined':
+            tabs[evt.sseTab] = 'ready';
 
-      console.log(machine.getCurrent());
-      
+            if(tabs[sseTab] === 'active') {
+              const backTab = R_keys(tabs).find(t => tabs[t] === 'back');
+              if(backTab) {
+                tabs[evt.sseTab] = 'ready';
+              } else {
+                tabs[evt.sseTab] = 'back';
+              }
+            } else { 
+              tabs[evt.sseTab] = 'ready';
+            }
+            propagateEvent(Event('tab-exists', tabs));
+            console.log('tab-joined', JSON.stringify(tabs));
+            break;
+          case 'tab-exists':
+            tabs = R_clone(evt.event.data);
+            const isActive = R_keys(tabs).find(t => tabs[t] === 'active');
+            if(isActive) {
+              machine.doTransition(sseTransitions.WAIT);
+            }
+            console.log('tab-exits', sseTab, JSON.stringify(tabs));
+            break;
+          case 'tab-origin-selection':
+          case 'tab-streaming':
+            tabs = R_mergeRight(tabs, evt.event.data);
+            machine.doTransition(sseTransitions.WAIT);
+            break;
+          case 'tab-leave':
+            if(tabs[evt.sseTab] === 'active') {
+              if(tabs[sseTab] === 'back') {
+                tabs[sseTab] = 'active';
+                const otherTabs = R_keys(tabs);
+                if(otherTabs.length > 0) {
+                  tabs[otherTabs[0]] = 'back';
+                }
+                propagateEvent(Event('tab-exists', tabs));
+                machine.doTransition(sseTransitions.MASTER);
+                start();
+              }
+            }
+            delete tabs[evt.sseTab];break;
+          case 'tab-close': stop(true);break;
+          case 'message': console.log('from tab', evt.event.type);break;
+        }
+      }
     }
   }
 });
@@ -61,7 +111,7 @@ const Event = (type, data) => ({
   data
 });
 
-tabs[sseTab] = 'origin';
+tabs[sseTab] = 'ready';
 propagateEvent(Event('tab-joined', sseTab));
 
 const init = (conversation, serviceLocation, maxTime) => {
@@ -85,6 +135,7 @@ const init = (conversation, serviceLocation, maxTime) => {
       state: sseStates.WAITING,
       transitions: [
         { transition: sseTransitions.DONE, to: sseStates.CLOSED },
+        { transition: sseTransitions.MASTER, to: sseStates.INITIAL },
         { transition: sseTransitions.FAIL, to: sseStates.CLOSED }
       ]
     }, {
@@ -101,7 +152,7 @@ const init = (conversation, serviceLocation, maxTime) => {
   const initEvent = Event(machine.getCurrent());
   eventsSource = new ReplaySubject(initEvent);
   machine.events(data => {
-    console.log(data);
+    console.log('stateChange', data);
   });
   return eventsSource;
 };
@@ -130,7 +181,9 @@ const start = () => {
   let state = machine.getCurrent();
   if(state === sseStates.INITIAL) {
     activeTab = sseTab;
-    propagateEvent(Event('tab-streaming', sseTab));
+    tabs[sseTab] = 'active';
+    selectBack();
+    propagateEvent(Event('tab-streaming', tabs));
     setTimeout(() => {
       worker.postMessage(['disconnect'])
     }, timeout);
@@ -162,6 +215,7 @@ const stop = isFromTab => {
       break;
     }
   }
+  R_keys(tabs).forEach(t => tabs[t] = 'ready');
 };
 
 export default {

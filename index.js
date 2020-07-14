@@ -1,7 +1,7 @@
 import SSEClient from './SSEClient';
 
 SSEClient.init('1232312', '/connection').subscribe(e => {
-    console.log(e.type, e.data);
+    console.log(e.type);
 });
 
 window.doClick = () => SSEClient.start();
