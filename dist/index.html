@@ -7,6 +7,16 @@
     <script src="https://cdn.jsdelivr.net/npm/promise-polyfill@8/dist/polyfill.min.js"></script>
 </head>
 <body>
+    <button id="vaca">Hazle click</button>
+    <button id="vaca2">cancel</button>
     <script src="./index.js" defer></script>
+    <script>
+        document.getElementById('vaca').addEventListener('click', () => {
+            doClick();
+        });
+        document.getElementById('vaca2').addEventListener('click', () => {
+            doClickDos();
+        });
+    </script>
 </body>
 </html>

@@ -95,45 +95,67 @@
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! rxjs */ "./node_modules/rxjs/_esm5/index.js");
-/* harmony import */ var ramda_src_clone__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ramda/src/clone */ "./node_modules/ramda/src/clone.js");
-/* harmony import */ var ramda_src_clone__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(ramda_src_clone__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var ramda_src_find__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ramda/src/find */ "./node_modules/ramda/src/find.js");
-/* harmony import */ var ramda_src_find__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(ramda_src_find__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var ramda_src_clone__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ramda/src/clone */ "./node_modules/ramda/src/clone.js");
+/* harmony import */ var ramda_src_clone__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(ramda_src_clone__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var ramda_src_find__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ramda/src/find */ "./node_modules/ramda/src/find.js");
+/* harmony import */ var ramda_src_find__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(ramda_src_find__WEBPACK_IMPORTED_MODULE_1__);
 
 
 
+function basicObserver() {
+  var _this = this;
+
+  this.handlers = [];
+
+  this.subscribe = function (fn) {
+    _this.handlers.push(fn);
+
+    return function () {
+      _this.handlers = _this.handlers.filter(function (item) {
+        return item !== fn;
+      });
+    };
+  };
+
+  this.publish = function (t, o, thisObj) {
+    var scope = thisObj;
+
+    _this.handlers.forEach(function (item) {
+      return item.call(scope, t, o);
+    });
+  };
+}
 
 function RxjsFsm(config) {
-  var currentState = ramda_src_clone__WEBPACK_IMPORTED_MODULE_1___default()(config.states[0]);
+  var currentState = ramda_src_clone__WEBPACK_IMPORTED_MODULE_0___default()(config.states[0]);
+  var observer = new basicObserver();
 
   if (config.initial) {
-    currentState = ramda_src_find__WEBPACK_IMPORTED_MODULE_2___default()(function (s) {
+    currentState = ramda_src_find__WEBPACK_IMPORTED_MODULE_1___default()(function (s) {
       return s.state === config.initial;
     })(config.states);
   }
 
-  var emitter = new rxjs__WEBPACK_IMPORTED_MODULE_0__["ReplaySubject"](currentState);
   return {
     reset: function reset() {
-      return currentState = ramda_src_clone__WEBPACK_IMPORTED_MODULE_1___default()(config.states[0]);
+      return currentState = ramda_src_clone__WEBPACK_IMPORTED_MODULE_0___default()(config.states[0]);
     },
-    events: function events(fn, err) {
-      emitter.subscribe(fn, err);
+    events: function events(fn) {
+      return observer.subscribe(fn);
     },
     getCurrent: function getCurrent() {
       return currentState.state;
     },
     doTransition: function doTransition(transitionName) {
-      var currentTransition = ramda_src_find__WEBPACK_IMPORTED_MODULE_2___default()(function (t) {
+      var currentTransition = ramda_src_find__WEBPACK_IMPORTED_MODULE_1___default()(function (t) {
         return t.transition === transitionName;
       })(currentState.transitions);
 
       if (currentTransition) {
-        var nextState = ramda_src_find__WEBPACK_IMPORTED_MODULE_2___default()(function (s) {
+        var nextState = ramda_src_find__WEBPACK_IMPORTED_MODULE_1___default()(function (s) {
           return s.state === currentTransition.to;
         })(config.states);
-        emitter.next(nextState);
+        observer.publish(nextState);
 
         if (nextState) {
           currentState = nextState;
@@ -148,6 +170,251 @@ function RxjsFsm(config) {
 
 /***/ }),
 
+/***/ "./SSEClient.js":
+/*!**********************!*\
+  !*** ./SSEClient.js ***!
+  \**********************/
+/*! exports provided: default */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! rxjs */ "./node_modules/rxjs/_esm5/index.js");
+/* harmony import */ var uuid__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! uuid */ "./node_modules/uuid/dist/esm-browser/index.js");
+/* harmony import */ var _RxjsFsm__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./RxjsFsm */ "./RxjsFsm.js");
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
+function _iterableToArrayLimit(arr, i) { if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return; var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+
+
+
+var conversationId;
+var url;
+var eventsSource;
+var machine;
+var timeout;
+var activeTab;
+var tabs = {};
+var worker = new Worker('/web-worker.js');
+var sseStates = {
+  INITIAL: 'initial',
+  WAITING: 'waiting',
+  STREAMING: 'streaming',
+  CLOSED: 'closed'
+};
+var sseTransitions = {
+  WAIT: 'wait',
+  INIT: 'init',
+  CONNECTED: 'connected',
+  FAIL: 'fail',
+  DONE: 'done'
+};
+var sseTab = "sse-".concat(Object(uuid__WEBPACK_IMPORTED_MODULE_1__["v1"])());
+window.addEventListener('storage', function (e) {
+  if (e.key === 'sse-tab-sync') {
+    var ev = localStorage.getItem('sse-tab-sync');
+
+    if (event) {
+      var evt = JSON.parse(atob(ev));
+
+      switch (evt.event.type) {
+        case 'tab-joined':
+          tabs[evt.sseTab] = 'other';
+          propagateEvent(Event('tab-exists', sseTab));
+          break;
+
+        case 'tab-exists':
+          tabs[evt.sseTab] = 'other';
+          break;
+
+        case 'tab-streaming':
+          activeTab = evt.sseTab;
+          machine.doTransition(sseTransitions.WAIT);
+          break;
+
+        case 'tab-leave':
+          delete tabs[evt.sseTab];
+          break;
+
+        case 'tab-close':
+          stop(true);
+          break;
+      }
+
+      console.log(machine.getCurrent());
+    }
+  }
+});
+window.addEventListener('beforeunload', function () {
+  propagateEvent(Event('tab-leave', sseTab));
+});
+
+var propagateEvent = function propagateEvent(event) {
+  localStorage.setItem('sse-tab-sync', btoa(JSON.stringify({
+    sseTab: sseTab,
+    event: event
+  })));
+};
+
+var Event = function Event(type, data) {
+  return {
+    type: type,
+    data: data
+  };
+};
+
+tabs[sseTab] = 'origin';
+propagateEvent(Event('tab-joined', sseTab));
+
+var init = function init(conversation, serviceLocation, maxTime) {
+  conversationId = conversation;
+  url = serviceLocation;
+
+  if (maxTime) {
+    timeout = maxTime * 60000 - 2000;
+  } else {
+    //timeout = (3 * 60000) - 2000;
+    timeout = 20000;
+  }
+
+  machine = Object(_RxjsFsm__WEBPACK_IMPORTED_MODULE_2__["default"])({
+    states: [{
+      state: sseStates.INITIAL,
+      transitions: [{
+        transition: sseTransitions.WAIT,
+        to: sseStates.WAITING
+      }, {
+        transition: sseTransitions.CONNECTED,
+        to: sseStates.STREAMING
+      }, {
+        transition: sseTransitions.FAIL,
+        to: sseStates.CLOSED
+      }]
+    }, {
+      state: sseStates.WAITING,
+      transitions: [{
+        transition: sseTransitions.DONE,
+        to: sseStates.CLOSED
+      }, {
+        transition: sseTransitions.FAIL,
+        to: sseStates.CLOSED
+      }]
+    }, {
+      state: sseStates.STREAMING,
+      transitions: [{
+        transition: sseTransitions.DONE,
+        to: sseStates.CLOSED
+      }, {
+        transition: sseTransitions.INIT,
+        to: sseStates.INITIAL
+      }]
+    }, {
+      state: sseStates.CLOSED
+    }],
+    initial: sseStates.INITIAL
+  });
+  var initEvent = Event(machine.getCurrent());
+  eventsSource = new rxjs__WEBPACK_IMPORTED_MODULE_0__["ReplaySubject"](initEvent);
+  machine.events(function (data) {
+    console.log(data);
+  });
+  return eventsSource;
+};
+
+worker.onmessage = function (event) {
+  var _event$data = _slicedToArray(event.data, 2),
+      eventName = _event$data[0],
+      data = _event$data[1];
+
+  switch (eventName) {
+    case 'aborted':
+      {
+        eventsSource.next(Event(eventName));
+        machine.doTransition(sseTransitions.INIT);
+
+        if (activeTab === sseTab) {
+          start();
+        }
+
+        break;
+      }
+
+    case 'message':
+      {
+        var _event = Event(eventName, data);
+
+        propagateEvent(_event);
+        eventsSource.next(_event);
+        break;
+      }
+  }
+};
+
+var start = function start() {
+  var state = machine.getCurrent();
+
+  if (state === sseStates.INITIAL) {
+    activeTab = sseTab;
+    propagateEvent(Event('tab-streaming', sseTab));
+    setTimeout(function () {
+      worker.postMessage(['disconnect']);
+    }, timeout);
+    machine.doTransition(sseTransitions.CONNECTED);
+    worker.postMessage(['connect', conversationId, url]);
+  }
+};
+
+var stop = function stop(isFromTab) {
+  var state = machine.getCurrent();
+  console.log(state);
+
+  switch (state) {
+    case sseStates.STREAMING:
+      {
+        machine.doTransition(sseTransitions.DONE);
+
+        if (isFromTab !== true) {
+          propagateEvent(Event('tab-close', sseTab));
+        }
+
+        activeTab = null;
+        worker.postMessage(['abort']);
+        worker.terminate();
+        break;
+      }
+
+    case sseStates.WAITING:
+      {
+        activeTab = null;
+
+        if (isFromTab !== true) {
+          propagateEvent(Event('tab-close', sseTab));
+        }
+
+        machine.doTransition(sseTransitions.DONE);
+        worker.terminate();
+        break;
+      }
+  }
+};
+
+/* harmony default export */ __webpack_exports__["default"] = ({
+  start: start,
+  init: init,
+  stop: stop
+});
+
+/***/ }),
+
 /***/ "./index.js":
 /*!******************!*\
   !*** ./index.js ***!
@@ -157,94 +424,19 @@ function RxjsFsm(config) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! rxjs */ "./node_modules/rxjs/_esm5/index.js");
-/* harmony import */ var uuid__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! uuid */ "./node_modules/uuid/dist/esm-browser/index.js");
-/* harmony import */ var _RxjsFsm__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./RxjsFsm */ "./RxjsFsm.js");
+/* harmony import */ var _SSEClient__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./SSEClient */ "./SSEClient.js");
 
+_SSEClient__WEBPACK_IMPORTED_MODULE_0__["default"].init('1232312', '/connection').subscribe(function (e) {
+  console.log(e.type, e.data);
+});
 
-
-var worker = new Worker('/web-worker.js');
-
-worker.onmessage = function (event) {
-  console.log(event);
-
-  if (event.data === 'aborted') {
-    worker.terminate();
-  }
+window.doClick = function () {
+  return _SSEClient__WEBPACK_IMPORTED_MODULE_0__["default"].start();
 };
 
-worker.postMessage(['connect', 'abcdef', '/connection']);
-setTimeout(function () {
-  worker.postMessage(['disconnect']);
-}, 30000);
-var messagesFromTab = new rxjs__WEBPACK_IMPORTED_MODULE_0__["BehaviorSubject"]('joined');
-var sseTab = "sse-".concat(Object(uuid__WEBPACK_IMPORTED_MODULE_1__["v1"])());
-messagesFromTab.subscribe(function (ev) {
-  console.log('from tab', ev);
-}, function (err) {
-  console.log(err);
-});
-window.addEventListener('storage', function (e) {
-  if (e.key === 'sse-tab-sync') {
-    var event = localStorage.getItem('sse-tab-sync');
-
-    if (event) {
-      var eventData = JSON.parse(atob(event)); //if(eventData.origin !== origin) {
-
-      messagesFromTab.next(eventData); //}
-    }
-  }
-});
-window.addEventListener('beforeunload', function () {
-  localStorage.setItem('sse-tab-sync', btoa(JSON.stringify({
-    sseTab: sseTab,
-    cosa: 'dying'
-  })));
-});
-var sseStates = {
-  INITIAL: 'initial',
-  STREAMING: 'streaming',
-  CLOSED: 'closed'
+window.doClickDos = function () {
+  return _SSEClient__WEBPACK_IMPORTED_MODULE_0__["default"].stop();
 };
-var sseTransitions = {
-  CONNECT: 'connect',
-  FAIL: 'fail',
-  DONE: 'done'
-};
-var sseState = Object(_RxjsFsm__WEBPACK_IMPORTED_MODULE_2__["default"])({
-  states: [{
-    state: sseStates.INITIAL,
-    transitions: [{
-      transition: sseTransitions.CONNECT,
-      to: sseStates.STREAMING
-    }, {
-      transition: sseTransitions.FAIL,
-      to: sseStates.CLOSED
-    }]
-  }, {
-    state: sseStates.STREAMING,
-    transitions: [{
-      transition: sseTransitions.DONE,
-      to: sseStates.CLOSED
-    }]
-  }, {
-    state: sseStates.CLOSED,
-    transitions: [{
-      transition: sseTransitions.CONNECT,
-      to: sseStates.STREAMING
-    }, {
-      transition: sseTransitions.FAIL,
-      to: sseStates.CLOSED
-    }]
-  }, {
-    state: sseStates.CLOSED
-  }],
-  initial: sseStates.INITIAL
-}).events(function (change) {
-  console.log('from stateMachine', change);
-}, function (err) {
-  console.log(err);
-});
 
 /***/ }),
 

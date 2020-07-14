@@ -140,7 +140,7 @@ function SSEStream(conversationId, url) {
         e[field] = value;
       }
     });
-    return JSON.stringify(e);
+    return e;
   };
 
   var onProgress = function onProgress() {
@@ -156,7 +156,7 @@ function SSEStream(conversationId, url) {
         var message = parseData(ramda_src_trim__WEBPACK_IMPORTED_MODULE_0___default()(chunk));
 
         if (message) {
-          postMessage(message);
+          postMessage(['message', message]);
         }
 
         chunk = '';
@@ -167,7 +167,7 @@ function SSEStream(conversationId, url) {
   };
 
   var onLoad = function onLoad() {
-    postMessage('loaded');
+    postMessage(['loaded']);
     chunk = '';
   };
 
@@ -181,13 +181,14 @@ function SSEStream(conversationId, url) {
   xhr.addEventListener('progress', onProgress);
   xhr.addEventListener('load', onLoad);
   xhr.addEventListener('error', function (e) {
-    postMessage(e);
+    postMessage(['error', e]);
   });
   xhr.addEventListener('abort', function () {
-    postMessage('aborted');
+    postMessage(['aborted']);
   });
   xhr.open('GET', url, true);
   xhr.setRequestHeader('conversation-id', conversationId);
+  postMessage(['connecting']);
   xhr.send();
 }
 

@@ -34,7 +34,7 @@ function SSEStream(conversationId, url) {
       }
     });
 
-    return JSON.stringify(e);
+    return e;
   };
 
   const onProgress = () => {
@@ -48,7 +48,7 @@ function SSEStream(conversationId, url) {
       if (R_trim(part).length === 0) {
         let message = parseData(R_trim(chunk));
         if(message) {
-          postMessage(message);
+          postMessage(['message', message]);
         }
         chunk = '';
       } else {
@@ -58,7 +58,7 @@ function SSEStream(conversationId, url) {
   };
 
   const onLoad = () => {
-    postMessage('loaded');
+    postMessage(['loaded']);
     chunk = '';
   };
 
@@ -72,13 +72,14 @@ function SSEStream(conversationId, url) {
   xhr.addEventListener('progress', onProgress);
   xhr.addEventListener('load', onLoad);
   xhr.addEventListener('error', e => {
-    postMessage(e)
+    postMessage(['error', e]);
   });
   xhr.addEventListener('abort', () => {
-    postMessage('aborted');
+    postMessage(['aborted']);
   });
   xhr.open('GET', url, true);
   xhr.setRequestHeader('conversation-id', conversationId);
+  postMessage(['connecting']);
   xhr.send();
 }
 
