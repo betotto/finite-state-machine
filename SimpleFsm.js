@@ -1,25 +1,10 @@
 import R_clone from 'ramda/src/clone';
 import R_find from 'ramda/src/find';
+import SimpleObserver from './SimpleObserver';
 
-function basicObserver() {
-  this.handlers = [];
-
-  this.subscribe = fn => {
-    this.handlers.push(fn);
-    return () => {
-      this.handlers = this.handlers.filter(item => item !== fn);
-    }
-  };
-
-  this.publish = (t, o, thisObj) => {
-    const scope = thisObj;
-    this.handlers.forEach(item => item.call(scope, t, o));
-  };
-}
-
-function RxjsFsm(config) {
+function SimpleFsm(config) {
   let currentState = R_clone(config.states[0]);
-  const observer = new basicObserver();
+  const observer = new SimpleObserver();
   if (config.initial) {
     currentState = R_find(s => s.state === config.initial)(config.states);
   }
@@ -44,5 +29,5 @@ function RxjsFsm(config) {
 };
 
 
-export default RxjsFsm;
+export default SimpleFsm;
 

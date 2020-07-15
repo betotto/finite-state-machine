@@ -9,12 +9,17 @@
 <body>
     <button id="vaca">Hazle click</button>
     <button id="vaca2">cancel</button>
+    <div style="height: 850px;overflow: scroll;" id="app"></div>
+    
+    <script>
+        localStorage.removeItem('sse-tab-sync');
+    </script>
     <script src="./index.js" defer></script>
     <script>
-        document.getElementById('vaca').addEventListener('click', () => {
+        document.getElementById('vaca').addEventListener('click', function() {
             doClick();
         });
-        document.getElementById('vaca2').addEventListener('click', () => {
+        document.getElementById('vaca2').addEventListener('click', function() {
             doClickDos();
         });
     </script>

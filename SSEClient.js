@@ -1,9 +1,11 @@
-import { ReplaySubject } from 'rxjs';
 import { v1 as uuidv1 } from 'uuid';
-import RxjsFsm from './RxjsFsm';
 import R_keys from 'ramda/src/keys';
 import R_mergeRight from 'ramda/src/mergeRight';
 import R_clone from 'ramda/src/clone';
+import R_find from 'ramda/src/find';
+import R_filter from 'ramda/src/filter';
+import SimpleFsm from './SimpleFsm';
+import SimpleObserver from './SimpleObserver';
 
 let conversationId;
 let url;
@@ -34,7 +36,7 @@ const sseTransitions = {
 const sseTab = `sse-${uuidv1()}`;
 
 const selectBack = () => {
-  const otherTabs = R_keys(tabs).filter(t => tabs[t] !== 'active');
+  const otherTabs = R_filter(t => tabs[t] !== 'active', R_keys(tabs));
   if(otherTabs.length > 0) {
     tabs[otherTabs[0]] = 'back';
   }
@@ -42,16 +44,15 @@ const selectBack = () => {
 
 window.addEventListener('storage', e => {
   if(e.key === 'sse-tab-sync') {
-    const ev = localStorage.getItem('sse-tab-sync');
-    if(event) {
+    const ev = e.newValue;
+    if(ev) {
       const evt = JSON.parse(atob(ev));
       if(evt.sseTab !== sseTab) {
         switch(evt.event.type) {
           case 'tab-joined':
             tabs[evt.sseTab] = 'ready';
-
             if(tabs[sseTab] === 'active') {
-              const backTab = R_keys(tabs).find(t => tabs[t] === 'back');
+              const backTab = R_find(t => tabs[t] === 'back')(R_keys(tabs));
               if(backTab) {
                 tabs[evt.sseTab] = 'ready';
               } else {
@@ -61,15 +62,13 @@ window.addEventListener('storage', e => {
               tabs[evt.sseTab] = 'ready';
             }
             propagateEvent(Event('tab-exists', tabs));
-            console.log('tab-joined', JSON.stringify(tabs));
             break;
           case 'tab-exists':
             tabs = R_clone(evt.event.data);
-            const isActive = R_keys(tabs).find(t => tabs[t] === 'active');
+            const isActive = R_find(t => tabs[t] === 'active')(R_keys(tabs));
             if(isActive) {
               machine.doTransition(sseTransitions.WAIT);
             }
-            console.log('tab-exits', sseTab, JSON.stringify(tabs));
             break;
           case 'tab-origin-selection':
           case 'tab-streaming':
@@ -84,14 +83,25 @@ window.addEventListener('storage', e => {
                 if(otherTabs.length > 0) {
                   tabs[otherTabs[0]] = 'back';
                 }
+                delete tabs[evt.sseTab];
                 propagateEvent(Event('tab-exists', tabs));
                 machine.doTransition(sseTransitions.MASTER);
                 start();
               }
+            } else if(tabs[sseTab] === 'active') {
+              if(tabs[evt.sseTab] === 'back') {
+                const otherTabs = R_filter(t => tabs[t] !== 'active' && t !== evt.sseTab, R_keys(tabs));
+                if(otherTabs.length > 0) {
+                  tabs[otherTabs[0]] = 'back';
+                }
+              }
+              delete tabs[evt.sseTab];
+              propagateEvent(Event('tab-exists', tabs));
             }
-            delete tabs[evt.sseTab];break;
+            delete tabs[evt.sseTab];
+            break;
           case 'tab-close': stop(true);break;
-          case 'message': console.log('from tab', evt.event.type);break;
+          case 'message': eventsSource.publish(evt.event);break;
         }
       }
     }
@@ -103,6 +113,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 const propagateEvent = event => {
+  console.log(event);
   localStorage.setItem('sse-tab-sync', btoa(JSON.stringify({ sseTab, event })));
 };
 
@@ -123,7 +134,7 @@ const init = (conversation, serviceLocation, maxTime) => {
     //timeout = (3 * 60000) - 2000;
     timeout = 20000;
   }
-  machine = RxjsFsm({
+  machine = SimpleFsm({
     states: [{
       state: sseStates.INITIAL,
       transitions: [
@@ -150,18 +161,18 @@ const init = (conversation, serviceLocation, maxTime) => {
     initial: sseStates.INITIAL
   });
   const initEvent = Event(machine.getCurrent());
-  eventsSource = new ReplaySubject(initEvent);
+  eventsSource = new SimpleObserver();
   machine.events(data => {
     console.log('stateChange', data);
   });
   return eventsSource;
 };
 
-worker.onmessage = event => {
-  const [eventName, data] = event.data;
+worker.onmessage = evt => {
+  const [eventName, data] = evt.data;
   switch(eventName) {
     case 'aborted': {
-      eventsSource.next(Event(eventName));
+      eventsSource.publish(Event(eventName));
       machine.doTransition(sseTransitions.INIT);
       if(activeTab === sseTab) {
         start();
@@ -169,9 +180,9 @@ worker.onmessage = event => {
       break;
     }
     case 'message': {
-      const event = Event(eventName, data);
+      const event = Event(eventName, data.data);
       propagateEvent(event);
-      eventsSource.next(event);
+      eventsSource.publish(event);
       break;
     }
   }

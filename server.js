@@ -14,7 +14,7 @@ app.get('/connection', (req, res) => {
   res.header('cache-control', 'no-cache');
   res.header('connection', 'keep-alive');
   interval = setInterval(() => {
-    res.write(`id: ${value++}\nevent: info\ndata: { "data": ${JSON.stringify([json, json, json, json, json])}}\n\n`);
+    res.write(`id: ${value++}\nevent: info\ndata: { "data": ${JSON.stringify([value, json, json])}}\n\n`);
   }, 1000);
 });
 
