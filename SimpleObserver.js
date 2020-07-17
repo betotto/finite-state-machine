@@ -1,16 +1,18 @@
 function SimpleObserver() {
-  this.handlers = [];
+  this.handler = null;
 
   this.subscribe = fn => {
-    this.handlers.push(fn);
+    this.handler = fn;
     return () => {
-      this.handlers = this.handlers.filter(item => item !== fn);
+      this.handler = null;
     }
   };
 
   this.publish = (t, o, thisObj) => {
     const scope = thisObj;
-    this.handlers.forEach(item => item.call(scope, t, o));
+    if(this.handler) {
+      this.handler.call(scope, t, o);
+    }
   };
 }
 

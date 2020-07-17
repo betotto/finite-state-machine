@@ -7,7 +7,9 @@ import R_filter from 'ramda/src/filter';
 import SimpleFsm from './SimpleFsm';
 import SimpleObserver from './SimpleObserver';
 
-let conversationId;
+let headers;
+let retries;
+let retryTimeout;
 let url;
 let eventsSource;
 let machine;
@@ -15,7 +17,7 @@ let timeout;
 let activeTab;
 let tabs = {};
 
-const worker = new Worker('/web-worker.js');
+let worker;
 
 const sseStates = {
   INITIAL: 'initial',
@@ -70,7 +72,6 @@ window.addEventListener('storage', e => {
               machine.doTransition(sseTransitions.WAIT);
             }
             break;
-          case 'tab-origin-selection':
           case 'tab-streaming':
             tabs = R_mergeRight(tabs, evt.event.data);
             machine.doTransition(sseTransitions.WAIT);
@@ -125,14 +126,48 @@ const Event = (type, data) => ({
 tabs[sseTab] = 'ready';
 propagateEvent(Event('tab-joined', sseTab));
 
-const init = (conversation, serviceLocation, maxTime) => {
-  conversationId = conversation;
-  url = serviceLocation;
+const init = options => {
+  const workerLocation = options.workerLocation;
+  const maxTime = options.maxTime;
+
+  headers = options.headers;
+  url = options.serviceLocation;
+  retries = options.retries;
+  retryTimeout = options.retryTimeout;
+
+  worker = new Worker(workerLocation);
+
+  worker.onmessage = evt => {
+    const [eventName, data] = evt.data;
+    switch(eventName) {
+      case 'aborted': {
+        eventsSource.publish(Event(eventName));
+        machine.doTransition(sseTransitions.INIT);
+        if(activeTab === sseTab) {
+          start();
+        }
+        break;
+      }
+      case 'message': {
+        const event = Event(eventName, data.data);
+        propagateEvent(event);
+        eventsSource.publish(event);
+        break;
+      }
+      case 'error': {
+        const event = Event(eventName, data.data);
+        propagateEvent(event);
+        eventsSource.publish(event);
+        worker.terminate();
+      }
+      default: console.log(evt.data);
+    }
+  };
+
   if(maxTime) {
     timeout = (maxTime * 60000) - 2000;
   } else {
-    //timeout = (3 * 60000) - 2000;
-    timeout = 20000;
+    timeout = (3 * 60000) - 2000;
   }
   machine = SimpleFsm({
     states: [{
@@ -160,32 +195,8 @@ const init = (conversation, serviceLocation, maxTime) => {
     }],
     initial: sseStates.INITIAL
   });
-  const initEvent = Event(machine.getCurrent());
   eventsSource = new SimpleObserver();
-  machine.events(data => {
-    console.log('stateChange', data);
-  });
   return eventsSource;
-};
-
-worker.onmessage = evt => {
-  const [eventName, data] = evt.data;
-  switch(eventName) {
-    case 'aborted': {
-      eventsSource.publish(Event(eventName));
-      machine.doTransition(sseTransitions.INIT);
-      if(activeTab === sseTab) {
-        start();
-      }
-      break;
-    }
-    case 'message': {
-      const event = Event(eventName, data.data);
-      propagateEvent(event);
-      eventsSource.publish(event);
-      break;
-    }
-  }
 };
 
 const start = () => {
@@ -194,12 +205,11 @@ const start = () => {
     activeTab = sseTab;
     tabs[sseTab] = 'active';
     selectBack();
-    propagateEvent(Event('tab-streaming', tabs));
     setTimeout(() => {
       worker.postMessage(['disconnect'])
     }, timeout);
     machine.doTransition(sseTransitions.CONNECTED);
-    worker.postMessage(['connect', conversationId, url])
+    worker.postMessage(['connect', headers, url, retries, retryTimeout]);
   }
 };
 
@@ -230,7 +240,7 @@ const stop = isFromTab => {
 };
 
 export default {
-  start,
   init,
+  start,
   stop
 }

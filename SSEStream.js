@@ -1,8 +1,9 @@
 import R_trim from 'ramda/src/trim';
+import R_keys from 'ramda/src/keys';
 
 let abort;
 
-function SSEStream(conversationId, url) {
+function SSEStream(headers, url, errorHandler) {
   let chunk  = '';
   let progress = 0;
   let xhr;
@@ -16,8 +17,6 @@ function SSEStream(conversationId, url) {
       line = R_trim(line);
       let index = line.indexOf(':');
       if (index <= 0) {
-        // Line was either empty, or started with a separator and is a comment.
-        // Either way, ignore.
         return;
       }
 
@@ -71,27 +70,34 @@ function SSEStream(conversationId, url) {
   xhr = new XMLHttpRequest();
   xhr.addEventListener('progress', onProgress);
   xhr.addEventListener('load', onLoad);
-  xhr.addEventListener('error', e => {
-    postMessage(['error', e]);
-  });
+  xhr.addEventListener('error', errorHandler);
   xhr.addEventListener('abort', () => {
     postMessage(['aborted']);
   });
   xhr.open('GET', url, true);
-  xhr.setRequestHeader('conversation-id', conversationId);
-  postMessage(['connecting']);
+  R_keys(headers).forEach(h => xhr.setRequestHeader(h, headers[h]));
   xhr.send();
 }
 
-const startSSE = (conversationId, url) => {
-  SSEStream(conversationId, url);
-}
+const startSSE = (headers, url, retries, retryTimeout) => {
+  if(retries > 0) {
+    postMessage(['connecting']);
+    SSEStream(headers, url, () => {
+      postMessage(['re-connecting', `Retries left: ${retries}`]);
+      setTimeout(() => startSSE(headers, url, retries - 1), retryTimeout);
+    });
+  } else {
+    postMessage(['error', 'Can\'t connect']);
+  }
+};
 
 self.onmessage = e => {
-  console.log('Worker: Message received from main script');
-  const result = e.data[0] * e.data[1];
+  const headers = e.data[1] || {};
+  const retries = e.data[3] || 3;
+  const retryTimeout = (e.data[4] * 1000) || 0;
+  console.log(headers, retries, retryTimeout);
   switch(e.data[0]) {
-    case 'connect': startSSE(e.data[1], e.data[2]);break;
+    case 'connect': startSSE(headers, e.data[2], retries, retryTimeout);break;
     case 'disconnect': abort();break;
   }
-}
+};

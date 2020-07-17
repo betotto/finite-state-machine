@@ -97,10 +97,13 @@
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var ramda_src_trim__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ramda/src/trim */ "./node_modules/ramda/src/trim.js");
 /* harmony import */ var ramda_src_trim__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(ramda_src_trim__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var ramda_src_keys__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ramda/src/keys */ "./node_modules/ramda/src/keys.js");
+/* harmony import */ var ramda_src_keys__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(ramda_src_keys__WEBPACK_IMPORTED_MODULE_1__);
+
 
 var abort;
 
-function SSEStream(conversationId, url) {
+function SSEStream(headers, url, errorHandler) {
   var chunk = '';
   var progress = 0;
   var xhr;
@@ -121,8 +124,6 @@ function SSEStream(conversationId, url) {
       var index = line.indexOf(':');
 
       if (index <= 0) {
-        // Line was either empty, or started with a separator and is a comment.
-        // Either way, ignore.
         return;
       }
 
@@ -180,29 +181,40 @@ function SSEStream(conversationId, url) {
   xhr = new XMLHttpRequest();
   xhr.addEventListener('progress', onProgress);
   xhr.addEventListener('load', onLoad);
-  xhr.addEventListener('error', function (e) {
-    postMessage(['error', e]);
-  });
+  xhr.addEventListener('error', errorHandler);
   xhr.addEventListener('abort', function () {
     postMessage(['aborted']);
   });
   xhr.open('GET', url, true);
-  xhr.setRequestHeader('conversation-id', conversationId);
-  postMessage(['connecting']);
+  ramda_src_keys__WEBPACK_IMPORTED_MODULE_1___default()(headers).forEach(function (h) {
+    return xhr.setRequestHeader(h, headers[h]);
+  });
   xhr.send();
 }
 
-var startSSE = function startSSE(conversationId, url) {
-  SSEStream(conversationId, url);
+var startSSE = function startSSE(headers, url, retries, retryTimeout) {
+  if (retries > 0) {
+    postMessage(['connecting']);
+    SSEStream(headers, url, function () {
+      postMessage(['re-connecting', "Retries left: ".concat(retries)]);
+      setTimeout(function () {
+        return startSSE(headers, url, retries - 1);
+      }, retryTimeout);
+    });
+  } else {
+    postMessage(['error', 'Can\'t connect']);
+  }
 };
 
 self.onmessage = function (e) {
-  console.log('Worker: Message received from main script');
-  var result = e.data[0] * e.data[1];
+  var headers = e.data[1] || {};
+  var retries = e.data[3] || 3;
+  var retryTimeout = e.data[4] * 1000 || 0;
+  console.log(headers, retries, retryTimeout);
 
   switch (e.data[0]) {
     case 'connect':
-      startSSE(e.data[1], e.data[2]);
+      startSSE(headers, e.data[2], retries, retryTimeout);
       break;
 
     case 'disconnect':
@@ -247,6 +259,48 @@ module.exports = _curry1;
 
 /***/ }),
 
+/***/ "./node_modules/ramda/src/internal/_has.js":
+/*!*************************************************!*\
+  !*** ./node_modules/ramda/src/internal/_has.js ***!
+  \*************************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+function _has(prop, obj) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+
+module.exports = _has;
+
+/***/ }),
+
+/***/ "./node_modules/ramda/src/internal/_isArguments.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/ramda/src/internal/_isArguments.js ***!
+  \*********************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+var _has =
+/*#__PURE__*/
+__webpack_require__(/*! ./_has */ "./node_modules/ramda/src/internal/_has.js");
+
+var toString = Object.prototype.toString;
+
+var _isArguments =
+/*#__PURE__*/
+function () {
+  return toString.call(arguments) === '[object Arguments]' ? function _isArguments(x) {
+    return toString.call(x) === '[object Arguments]';
+  } : function _isArguments(x) {
+    return _has('callee', x);
+  };
+}();
+
+module.exports = _isArguments;
+
+/***/ }),
+
 /***/ "./node_modules/ramda/src/internal/_isPlaceholder.js":
 /*!***********************************************************!*\
   !*** ./node_modules/ramda/src/internal/_isPlaceholder.js ***!
@@ -259,6 +313,116 @@ function _isPlaceholder(a) {
 }
 
 module.exports = _isPlaceholder;
+
+/***/ }),
+
+/***/ "./node_modules/ramda/src/keys.js":
+/*!****************************************!*\
+  !*** ./node_modules/ramda/src/keys.js ***!
+  \****************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+var _curry1 =
+/*#__PURE__*/
+__webpack_require__(/*! ./internal/_curry1 */ "./node_modules/ramda/src/internal/_curry1.js");
+
+var _has =
+/*#__PURE__*/
+__webpack_require__(/*! ./internal/_has */ "./node_modules/ramda/src/internal/_has.js");
+
+var _isArguments =
+/*#__PURE__*/
+__webpack_require__(/*! ./internal/_isArguments */ "./node_modules/ramda/src/internal/_isArguments.js"); // cover IE < 9 keys issues
+
+
+var hasEnumBug = !
+/*#__PURE__*/
+{
+  toString: null
+}.propertyIsEnumerable('toString');
+var nonEnumerableProps = ['constructor', 'valueOf', 'isPrototypeOf', 'toString', 'propertyIsEnumerable', 'hasOwnProperty', 'toLocaleString']; // Safari bug
+
+var hasArgsEnumBug =
+/*#__PURE__*/
+function () {
+  'use strict';
+
+  return arguments.propertyIsEnumerable('length');
+}();
+
+var contains = function contains(list, item) {
+  var idx = 0;
+
+  while (idx < list.length) {
+    if (list[idx] === item) {
+      return true;
+    }
+
+    idx += 1;
+  }
+
+  return false;
+};
+/**
+ * Returns a list containing the names of all the enumerable own properties of
+ * the supplied object.
+ * Note that the order of the output array is not guaranteed to be consistent
+ * across different JS platforms.
+ *
+ * @func
+ * @memberOf R
+ * @since v0.1.0
+ * @category Object
+ * @sig {k: v} -> [k]
+ * @param {Object} obj The object to extract properties from
+ * @return {Array} An array of the object's own properties.
+ * @see R.keysIn, R.values
+ * @example
+ *
+ *      R.keys({a: 1, b: 2, c: 3}); //=> ['a', 'b', 'c']
+ */
+
+
+var keys = typeof Object.keys === 'function' && !hasArgsEnumBug ?
+/*#__PURE__*/
+_curry1(function keys(obj) {
+  return Object(obj) !== obj ? [] : Object.keys(obj);
+}) :
+/*#__PURE__*/
+_curry1(function keys(obj) {
+  if (Object(obj) !== obj) {
+    return [];
+  }
+
+  var prop, nIdx;
+  var ks = [];
+
+  var checkArgsLength = hasArgsEnumBug && _isArguments(obj);
+
+  for (prop in obj) {
+    if (_has(prop, obj) && (!checkArgsLength || prop !== 'length')) {
+      ks[ks.length] = prop;
+    }
+  }
+
+  if (hasEnumBug) {
+    nIdx = nonEnumerableProps.length - 1;
+
+    while (nIdx >= 0) {
+      prop = nonEnumerableProps[nIdx];
+
+      if (_has(prop, obj) && !contains(ks, prop)) {
+        ks[ks.length] = prop;
+      }
+
+      nIdx -= 1;
+    }
+  }
+
+  return ks;
+});
+module.exports = keys;
 
 /***/ }),
 

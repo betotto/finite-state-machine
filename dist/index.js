@@ -128,14 +128,16 @@ function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
 
 
-var conversationId;
+var headers;
+var retries;
+var retryTimeout;
 var url;
 var eventsSource;
 var machine;
 var timeout;
 var activeTab;
 var tabs = {};
-var worker = new Worker('/web-worker.js');
+var worker;
 var sseStates = {
   INITIAL: 'initial',
   WAITING: 'waiting',
@@ -164,7 +166,6 @@ var selectBack = function selectBack() {
 
 window.addEventListener('storage', function (e) {
   if (e.key === 'sse-tab-sync') {
-    console.log(e);
     var ev = e.newValue;
 
     if (ev) {
@@ -190,7 +191,6 @@ window.addEventListener('storage', function (e) {
             }
 
             propagateEvent(Event('tab-exists', tabs));
-            console.log('tab-joined', JSON.stringify(tabs));
             break;
 
           case 'tab-exists':
@@ -203,10 +203,8 @@ window.addEventListener('storage', function (e) {
               machine.doTransition(sseTransitions.WAIT);
             }
 
-            console.log('tab-exits', sseTab, JSON.stringify(tabs));
             break;
 
-          case 'tab-origin-selection':
           case 'tab-streaming':
             tabs = ramda_src_mergeRight__WEBPACK_IMPORTED_MODULE_2___default()(tabs, evt.event.data);
             machine.doTransition(sseTransitions.WAIT);
@@ -232,8 +230,6 @@ window.addEventListener('storage', function (e) {
                 var _otherTabs = ramda_src_filter__WEBPACK_IMPORTED_MODULE_5___default()(function (t) {
                   return tabs[t] !== 'active' && t !== evt.sseTab;
                 }, ramda_src_keys__WEBPACK_IMPORTED_MODULE_1___default()(tabs));
-
-                console.log(_otherTabs, 'from delte');
 
                 if (_otherTabs.length > 0) {
                   tabs[_otherTabs[0]] = 'back';
@@ -281,15 +277,59 @@ var Event = function Event(type, data) {
 tabs[sseTab] = 'ready';
 propagateEvent(Event('tab-joined', sseTab));
 
-var init = function init(conversation, serviceLocation, maxTime) {
-  conversationId = conversation;
-  url = serviceLocation;
+var init = function init(options) {
+  var workerLocation = options.workerLocation;
+  var maxTime = options.maxTime;
+  headers = options.headers;
+  url = options.serviceLocation;
+  retries = options.retries;
+  retryTimeout = options.retryTimeout;
+  worker = new Worker(workerLocation);
+
+  worker.onmessage = function (evt) {
+    var _evt$data = _slicedToArray(evt.data, 2),
+        eventName = _evt$data[0],
+        data = _evt$data[1];
+
+    switch (eventName) {
+      case 'aborted':
+        {
+          eventsSource.publish(Event(eventName));
+          machine.doTransition(sseTransitions.INIT);
+
+          if (activeTab === sseTab) {
+            start();
+          }
+
+          break;
+        }
+
+      case 'message':
+        {
+          var event = Event(eventName, data.data);
+          propagateEvent(event);
+          eventsSource.publish(event);
+          break;
+        }
+
+      case 'error':
+        {
+          var _event = Event(eventName, data.data);
+
+          propagateEvent(_event);
+          eventsSource.publish(_event);
+          worker.terminate();
+        }
+
+      default:
+        console.log(evt.data);
+    }
+  };
 
   if (maxTime) {
     timeout = maxTime * 60000 - 2000;
   } else {
-    //timeout = (3 * 60000) - 2000;
-    timeout = 20000;
+    timeout = 3 * 60000 - 2000;
   }
 
   machine = Object(_SimpleFsm__WEBPACK_IMPORTED_MODULE_6__["default"])({
@@ -331,40 +371,8 @@ var init = function init(conversation, serviceLocation, maxTime) {
     }],
     initial: sseStates.INITIAL
   });
-  var initEvent = Event(machine.getCurrent());
   eventsSource = new _SimpleObserver__WEBPACK_IMPORTED_MODULE_7__["default"]();
-  machine.events(function (data) {
-    console.log('stateChange', data);
-  });
   return eventsSource;
-};
-
-worker.onmessage = function (evt) {
-  var _evt$data = _slicedToArray(evt.data, 2),
-      eventName = _evt$data[0],
-      data = _evt$data[1];
-
-  switch (eventName) {
-    case 'aborted':
-      {
-        eventsSource.publish(Event(eventName));
-        machine.doTransition(sseTransitions.INIT);
-
-        if (activeTab === sseTab) {
-          start();
-        }
-
-        break;
-      }
-
-    case 'message':
-      {
-        var event = Event(eventName, data.data);
-        propagateEvent(event);
-        eventsSource.publish(event);
-        break;
-      }
-  }
 };
 
 var start = function start() {
@@ -374,12 +382,11 @@ var start = function start() {
     activeTab = sseTab;
     tabs[sseTab] = 'active';
     selectBack();
-    propagateEvent(Event('tab-streaming', tabs));
     setTimeout(function () {
       worker.postMessage(['disconnect']);
     }, timeout);
     machine.doTransition(sseTransitions.CONNECTED);
-    worker.postMessage(['connect', conversationId, url]);
+    worker.postMessage(['connect', headers, url, retries, retryTimeout]);
   }
 };
 
@@ -421,8 +428,8 @@ var stop = function stop(isFromTab) {
 };
 
 /* harmony default export */ __webpack_exports__["default"] = ({
-  start: start,
   init: init,
+  start: start,
   stop: stop
 });
 
@@ -502,24 +509,21 @@ __webpack_require__.r(__webpack_exports__);
 function SimpleObserver() {
   var _this = this;
 
-  this.handlers = [];
+  this.handler = null;
 
   this.subscribe = function (fn) {
-    _this.handlers.push(fn);
-
+    _this.handler = fn;
     return function () {
-      _this.handlers = _this.handlers.filter(function (item) {
-        return item !== fn;
-      });
+      _this.handler = null;
     };
   };
 
   this.publish = function (t, o, thisObj) {
     var scope = thisObj;
 
-    _this.handlers.forEach(function (item) {
-      return item.call(scope, t, o);
-    });
+    if (_this.handler) {
+      _this.handler.call(scope, t, o);
+    }
   };
 }
 
@@ -543,7 +547,16 @@ __webpack_require__.r(__webpack_exports__);
 var messages = [];
 var numberMessages = 0;
 var node = document.getElementById('app');
-_SSEClient__WEBPACK_IMPORTED_MODULE_1__["default"].init('1232312', '/connection').subscribe(function (e) {
+_SSEClient__WEBPACK_IMPORTED_MODULE_1__["default"].init({
+  headers: {
+    conversationId: 'vacaciones'
+  },
+  serviceLocation: '/connection',
+  workerLocation: '/web-worker.js',
+  maxTime: 1,
+  retries: 5,
+  retryTimeout: 1
+}).subscribe(function (e) {
   if (e.type === 'message') {
     numberMessages++;
     messages.push(e.data);
